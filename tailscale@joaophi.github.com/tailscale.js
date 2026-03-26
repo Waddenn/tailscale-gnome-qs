@@ -22,12 +22,16 @@ class TailscaleApiClient {
   async* stream(method, path, cancellable) {
     const message = Soup.Message.new(method, `http://local-tailscaled.sock${path}`);
 
-    const base_stream = this.session.send(message, null);
+    Gio._promisify(Soup.Session.prototype, "send_async");
+    const base_stream = await this.session.send_async(
+      message,
+      GLib.PRIORITY_DEFAULT,
+      cancellable,
+    );
     const stream = new Gio.DataInputStream({ base_stream });
     try {
       const content_type = message.response_headers.get_one("Content-Type");
       while (true) {
-        Gio._promisify(Gio.DataInputStream.prototype, "read_line_async");
         const [_response, length] = await stream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable);
         if (length == 0) {
           break;
@@ -113,6 +117,7 @@ export const Tailscale = GObject.registerClass(
   class Tailscale extends GObject.Object {
     _init() {
       super._init();
+      Gio._promisify(Gio.DataInputStream.prototype, "read_line_async");
       this._client = new TailscaleApiClient();
       this._running = false;
       this._dns = false;
@@ -143,9 +148,10 @@ export const Tailscale = GObject.registerClass(
     _process_nodes(prefs, peers) {
       const nodes = peers
         .map(peer => {
+          const dnsName = peer.DNSName ?? peer.Name ?? "";
           const node = {
             id: peer.ID,
-            name: peer.DNSName.split(".")[0],
+            name: dnsName.split(".")[0] || dnsName,
             os: peer.OS,
             exit_node: peer.ID == prefs.ExitNodeID,
             exit_node_option: peer.ExitNodeOption,
@@ -174,8 +180,9 @@ export const Tailscale = GObject.registerClass(
       if (exit_node_id != this._exit_node) {
         this._exit_node = exit_node_id;
         this.notify("exit-node");
-        const exitNodePeer = this._peers.find(peer => peer.ID === exit_node_id);
-        this._exit_node_name = exitNodePeer ? exitNodePeer.DNSName.split(".")[0] : null;
+        const exitNodePeer = this._peers?.find(peer => peer.ID === exit_node_id);
+        const exitNodeDnsName = exitNodePeer?.DNSName ?? exitNodePeer?.Name ?? "";
+        this._exit_node_name = exitNodeDnsName ? exitNodeDnsName.split(".")[0] : null;
         this.notify("exit-node-name");
       }
     }
@@ -321,7 +328,7 @@ export const Tailscale = GObject.registerClass(
           const status = await this._client.request("GET", "/localapi/v0/status")
           this._peers = Object.values(status.Peer || {});
           this._prefs = await this._client.request("GET", "/localapi/v0/prefs")
-          this._profiles = await this._client.request("GET", "/localapi/v0/profiles/")
+          this._profiles = await this._client.request("GET", "/localapi/v0/profiles/") || []
           this.notify("profiles");
           this._parse_response();
 
@@ -332,15 +339,15 @@ export const Tailscale = GObject.registerClass(
               should_update = true;
             }
             if (update.NetMap) {
-              this._peers = update.NetMap.Peers.map(peer => ({
+              this._peers = (update.NetMap.Peers || []).map(peer => ({
                 ID: peer.StableID,
                 DNSName: peer.Name,
-                OS: peer.Hostinfo.OS,
+                OS: peer.Hostinfo?.OS,
                 ExitNodeOption: peer.AllowedIPs?.some(ip => ip === "0.0.0.0/0" || ip === "::/0"),
                 Online: peer.Online,
-                TailscaleIPs: peer.Addresses.map(address => address.split("/")[0]),
+                TailscaleIPs: (peer.Addresses || []).map(address => address.split("/")[0]),
                 Tags: peer.Tags,
-                Location: peer.Hostinfo.Location
+                Location: peer.Hostinfo?.Location
               }));
               should_update = true;
             }
@@ -394,8 +401,10 @@ export const Tailscale = GObject.registerClass(
 
     _update_profile(value) {
       this._client.request("POST", `/localapi/v0/profiles/${value}`, {})
+        .then(() => this._client.request("GET", "/localapi/v0/profiles/"))
         .then(
-          () => {
+          profiles => {
+            this._profiles = profiles || [];
             this.notify('profiles');
           },
           (error) => console.error(error),

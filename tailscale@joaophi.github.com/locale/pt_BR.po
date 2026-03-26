@@ -52,3 +52,15 @@ msgstr "Levantar escudos"
 #: extension.js:189
 msgid "SSH"
 msgstr "SSH"
+
+msgid "Nodes"
+msgstr "Nós"
+
+msgid "Mullvad"
+msgstr "Mullvad"
+
+msgid "Profiles"
+msgstr "Perfis"
+
+msgid "Unknown profile"
+msgstr "Perfil desconhecido"

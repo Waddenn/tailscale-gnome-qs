@@ -3,7 +3,7 @@ EXTENSION_DIR = "tailscale@joaophi.github.com"
 
 all: build install
 
-.PHONY: build install clean
+.PHONY: all build install enable run clean
 
 build:
 	rm -f $(BUNDLE_PATH); \

@@ -16,7 +16,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/* exported init */
 import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import Gio from "gi://Gio";
@@ -70,7 +69,7 @@ const TailscaleDeviceItem = GObject.registerClass(
   class TailscaleDeviceItem extends PopupMenu.PopupBaseMenuItem {
     _init(icon_name, text, subtitle, onClick, onLongClick) {
       super._init({
-        activate: onClick,
+        activate: Boolean(onClick),
       });
 
       const icon = new St.Icon({
@@ -91,11 +90,12 @@ const TailscaleDeviceItem = GObject.registerClass(
       this.add_child(sub);
       sub.text = subtitle;
 
-      this.connect('activate', () => onClick());
+      if (onClick)
+        this.connect('activate', () => onClick());
 
       if (Clutter.LongPressGesture) {
         const longPressGesture = new Clutter.LongPressGesture();
-        longPressGesture.connect('recognize', () => onLongClick());
+        longPressGesture.connect('recognize', () => onLongClick?.());
         this.add_action(longPressGesture);
 
         const clickGesture = new Clutter.ClickGesture({
@@ -120,7 +120,7 @@ const TailscaleDeviceItem = GObject.registerClass(
         })();
         clickAction.connect('long-press', (_action, _actor, state) => {
           if (state === Clutter.LongPressState.ACTIVATE)
-            return onLongClick();
+            return onLongClick?.() ?? false;
 
           return true;
         });
@@ -214,7 +214,7 @@ const TailscaleMenuToggle = GObject.registerClass(
       const nodes = new PopupMenu.PopupMenuSection();
       const mmullvad = new PopupScrollableSubMenuMenuItem(_("Mullvad"), false, {});
       const mullvadNodes = new PopupMenu.PopupMenuSection();
-      const update_nodes = (obj) => {
+      const updateNodes = obj => {
         nodes.removeAll();
         mullvadNodes.removeAll();
         let hasMullvadNodes = false;
@@ -250,8 +250,8 @@ const TailscaleMenuToggle = GObject.registerClass(
 
         mmullvad.visible = hasMullvadNodes;
       }
-      tailscale.connect("notify::nodes", (obj) => update_nodes(obj));
-      update_nodes(tailscale);
+      tailscale.connect("notify::nodes", obj => updateNodes(obj));
+      updateNodes(tailscale);
       mnodes.menu.addMenuItem(nodes);
       this.menu.addMenuItem(mnodes);
       mmullvad.menu.addMenuItem(mullvadNodes);
@@ -292,16 +292,23 @@ const TailscaleMenuToggle = GObject.registerClass(
 
       // PROFILES
       const profiles = new PopupMenu.PopupSubMenuMenuItem(_("Profiles"), false, {});
-      const update_profiles = (obj) => {
+      const updateProfiles = obj => {
         profiles.menu.removeAll();
         for (const p of obj.profiles) {
-          let enabled = obj._prefs.ControlURL === p.ControlURL && obj._prefs.Config.UserProfile.ID === p.UserProfile.ID;
-          const onClick = () => { tailscale.profiles = p.ID; }
-          profiles.menu.addMenuItem(new TailscaleProfileItem(p.Name, p.NetworkProfile.DomainName, enabled, onClick));
+          const currentProfileId = obj._prefs?.Config?.UserProfile?.ID ?? null;
+          const currentControlUrl = obj._prefs?.ControlURL ?? null;
+          const enabled = currentControlUrl === p.ControlURL && currentProfileId === p.UserProfile?.ID;
+          const onClick = () => { tailscale.profiles = p.ID; };
+          profiles.menu.addMenuItem(new TailscaleProfileItem(
+            p.Name ?? _("Unknown profile"),
+            p.NetworkProfile?.DomainName ?? "",
+            enabled,
+            onClick,
+          ));
         }
-      }
-      tailscale.connect("notify::profiles", (obj) => update_profiles(obj));
-      update_nodes(tailscale);
+      };
+      tailscale.connect("notify::profiles", obj => updateProfiles(obj));
+      updateProfiles(tailscale);
       this.menu.addMenuItem(profiles);
     }
   }
@@ -337,18 +344,19 @@ export default class TailscaleExtension extends Extension {
   disable() {
     clearSources();
 
-    this._menu.destroy();
-    this._menu = null;
+    if (this._menu) {
+      this._menu.destroy();
+      this._menu = null;
+    }
 
-    this._indicator.destroy();
-    this._indicator = null;
+    if (this._indicator) {
+      this._indicator.destroy();
+      this._indicator = null;
+    }
 
-    this._tailscale.destroy();
-    this._tailscale = null;
+    if (this._tailscale) {
+      this._tailscale.destroy();
+      this._tailscale = null;
+    }
   }
-}
-
-function init(meta) {
-  ExtensionUtils.initTranslations(Me.metadata.uuid);
-  return new TailscaleExtension(meta.uuid, Me.path);
 }

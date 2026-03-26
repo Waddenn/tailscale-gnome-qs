@@ -12,6 +12,10 @@ make build
 make install
 ```
 
+Prerequisites:
+- `tailscaled` must be installed and running on the host.
+- Your user must be allowed to talk to the local Tailscale socket.
+
 ##### DEVELOPMENT
 
 ```bash
@@ -21,11 +25,13 @@ make run
 `make run` uses `gnome-shell --devkit --wayland` when available, and falls back to `--nested --wayland` on older GNOME Shell releases.
 
 ##### CONFIG
-Make sure you set yourself tailscale operator
+Make sure your user is allowed to manage the local Tailscale daemon:
 
 ```bash
 sudo tailscale set --operator=$USER
 ```
+
+This grants your user permission to access the local API exposed by `tailscaled`, which this extension uses for status, preferences and profile changes.
 ##### SCREENSHOT
 
 ![image](https://github.com/joaophi/tailscale-gnome-qs/assets/23062105/b4209a00-0cd8-45bd-869a-e2a0a7cfdb81)
