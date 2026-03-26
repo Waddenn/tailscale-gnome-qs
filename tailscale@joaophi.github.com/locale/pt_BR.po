@@ -64,3 +64,15 @@ msgstr "Perfis"
 
 msgid "Unknown profile"
 msgstr "Perfil desconhecido"
+
+msgid "Disconnected"
+msgstr "Desconectado"
+
+msgid "Connected"
+msgstr "Conectado"
+
+msgid "No devices available"
+msgstr "Nenhum dispositivo disponível"
+
+msgid "No profiles available"
+msgstr "Nenhum perfil disponível"

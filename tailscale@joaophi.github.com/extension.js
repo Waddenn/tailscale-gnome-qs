@@ -33,6 +33,15 @@ const QuickSettingsMenu = Main.panel.statusArea.quickSettings;
 import { Tailscale } from "./tailscale.js";
 import { clearInterval, clearSources, setInterval } from "./timeout.js";
 
+function bindVisibility(target, tailscale) {
+  const updateVisibility = () => {
+    target.visible = tailscale.running;
+  };
+
+  tailscale.connect("notify::running", updateVisibility);
+  updateVisibility();
+}
+
 function showOsd(icon, label) {
   const osd = Main.osdWindowManager;
 
@@ -176,6 +185,23 @@ const TailscaleProfileItem = GObject.registerClass(
   }
 );
 
+const TailscaleInfoItem = GObject.registerClass(
+  class TailscaleInfoItem extends PopupMenu.PopupBaseMenuItem {
+    _init(text) {
+      super._init({
+        activate: false,
+      });
+
+      const label = new St.Label({
+        text,
+        x_expand: true,
+        style_class: 'dim-label',
+      });
+      this.add_child(label);
+    }
+  }
+);
+
 const PopupScrollableSubMenuMenuItem = GObject.registerClass(
   class PopupScrollableSubMenuMenuItem extends PopupMenu.PopupSubMenuMenuItem {
     _init(props) {
@@ -198,16 +224,21 @@ const TailscaleMenuToggle = GObject.registerClass(
       });
 
       this.title = "Tailscale";
+      this.subtitle = _("Disconnected");
       tailscale.bind_property("running", this, "checked", GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL);
 
       // This function is unique to this class. It adds a nice header with an
       // icon, title and optional subtitle. It's recommended you do so for
       // consistency with other menus.
-      tailscale.connect("notify::exit-node-name", () => {
-        this.subtitle = tailscale.exit_node_name;
+      const updateHeader = () => {
+        this.subtitle = tailscale.running
+          ? (tailscale.exit_node_name || _("Connected"))
+          : _("Disconnected");
         this.menu.setHeader(icon, this.title, this.subtitle);
-      });
-      this.menu.setHeader(icon, this.title, tailscale.exit_node_name);
+      };
+      tailscale.connect("notify::exit-node-name", updateHeader);
+      tailscale.connect("notify::running", updateHeader);
+      updateHeader();
 
       // NODES
       const mnodes = new PopupScrollableSubMenuMenuItem(_("Nodes"), false, {});
@@ -218,6 +249,10 @@ const TailscaleMenuToggle = GObject.registerClass(
         nodes.removeAll();
         mullvadNodes.removeAll();
         let hasMullvadNodes = false;
+
+        if (!obj.nodes.length) {
+          nodes.addMenuItem(new TailscaleInfoItem(_("No devices available")));
+        }
 
         for (const node of obj.nodes) {
           const device_icon = !node.online
@@ -256,6 +291,8 @@ const TailscaleMenuToggle = GObject.registerClass(
       this.menu.addMenuItem(mnodes);
       mmullvad.menu.addMenuItem(mullvadNodes);
       this.menu.addMenuItem(mmullvad);
+      bindVisibility(mnodes, tailscale);
+      bindVisibility(mmullvad, tailscale);
 
       // SEPARATOR
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -289,11 +326,17 @@ const TailscaleMenuToggle = GObject.registerClass(
       prefs.menu.addMenuItem(ssh);
 
       this.menu.addMenuItem(prefs);
+      bindVisibility(prefs, tailscale);
 
       // PROFILES
       const profiles = new PopupMenu.PopupSubMenuMenuItem(_("Profiles"), false, {});
       const updateProfiles = obj => {
         profiles.menu.removeAll();
+        if (!obj.profiles.length) {
+          profiles.menu.addMenuItem(new TailscaleInfoItem(_("No profiles available")));
+          return;
+        }
+
         for (const p of obj.profiles) {
           const currentProfileId = obj._prefs?.Config?.UserProfile?.ID ?? null;
           const currentControlUrl = obj._prefs?.ControlURL ?? null;
@@ -310,6 +353,7 @@ const TailscaleMenuToggle = GObject.registerClass(
       tailscale.connect("notify::profiles", obj => updateProfiles(obj));
       updateProfiles(tailscale);
       this.menu.addMenuItem(profiles);
+      bindVisibility(profiles, tailscale);
     }
   }
 );

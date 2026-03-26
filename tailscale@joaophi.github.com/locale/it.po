@@ -65,3 +65,15 @@ msgstr "Mullvad"
 
 msgid "Unknown profile"
 msgstr "Profilo sconosciuto"
+
+msgid "Disconnected"
+msgstr "Disconnesso"
+
+msgid "Connected"
+msgstr "Connesso"
+
+msgid "No devices available"
+msgstr "Nessun dispositivo disponibile"
+
+msgid "No profiles available"
+msgstr "Nessun profilo disponibile"

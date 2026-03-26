@@ -112,6 +112,11 @@ export const Tailscale = GObject.registerClass(
         GObject.ParamFlags.READABLE,
         []
       ),
+      "last-error": GObject.ParamSpec.string(
+        "last-error", "", "",
+        GObject.ParamFlags.READABLE,
+        ""
+      ),
     },
   },
   class Tailscale extends GObject.Object {
@@ -129,6 +134,7 @@ export const Tailscale = GObject.registerClass(
       this._exit_node_name = null;
       this._nodes = [];
       this._profiles = [];
+      this._last_error = "";
       this._cancelable = new Gio.Cancellable();
       this._listen();
     }
@@ -320,6 +326,25 @@ export const Tailscale = GObject.registerClass(
       this._update_profile(value);
     }
 
+    get last_error() {
+      return this._last_error;
+    }
+
+    _set_error(error) {
+      const message = error?.message ?? String(error);
+      if (this._last_error !== message) {
+        this._last_error = message;
+        this.notify("last-error");
+      }
+    }
+
+    _clear_error() {
+      if (this._last_error !== "") {
+        this._last_error = "";
+        this.notify("last-error");
+      }
+    }
+
     async _listen() {
       const delay = (delay) => new Promise(resolve => setTimeout(resolve, delay));
 
@@ -329,6 +354,7 @@ export const Tailscale = GObject.registerClass(
           this._peers = Object.values(status.Peer || {});
           this._prefs = await this._client.request("GET", "/localapi/v0/prefs")
           this._profiles = await this._client.request("GET", "/localapi/v0/profiles/") || []
+          this._clear_error();
           this.notify("profiles");
           this._parse_response();
 
@@ -359,6 +385,7 @@ export const Tailscale = GObject.registerClass(
           if (this._cancelable.is_cancelled()) {
             break;
           }
+          this._set_error(error);
           console.error(error);
           this._process_running({ WantRunning: false });
         }
@@ -368,6 +395,7 @@ export const Tailscale = GObject.registerClass(
 
     _parse_response() {
       if (this._prefs) {
+        this._clear_error();
         this._process_running(this._prefs);
         this._process_dns(this._prefs);
         this._process_routes(this._prefs);
@@ -392,10 +420,14 @@ export const Tailscale = GObject.registerClass(
       this._client.request("PATCH", "/localapi/v0/prefs", body)
         .then(
           (prefs) => {
+            this._clear_error();
             this._prefs = prefs;
             this._parse_response();
           },
-          (error) => console.error(error),
+          (error) => {
+            this._set_error(error);
+            console.error(error);
+          },
         );
     }
 
@@ -404,10 +436,14 @@ export const Tailscale = GObject.registerClass(
         .then(() => this._client.request("GET", "/localapi/v0/profiles/"))
         .then(
           profiles => {
+            this._clear_error();
             this._profiles = profiles || [];
             this.notify('profiles');
           },
-          (error) => console.error(error),
+          (error) => {
+            this._set_error(error);
+            console.error(error);
+          },
         );
     }
   }
