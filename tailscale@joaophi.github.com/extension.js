@@ -240,7 +240,7 @@ const TailscaleMenuToggle = GObject.registerClass(
           };
 
           const item = new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick);
-          if (node.mullvad && !node.exit_node) {
+          if (node.mullvad) {
             hasMullvadNodes = true;
             mullvadNodes.addMenuItem(item);
           } else {
