@@ -198,14 +198,19 @@ const TailscaleInfoItem = GObject.registerClass(
         style_class: 'dim-label',
       });
       this.add_child(label);
+      this._label = label;
+    }
+
+    setText(text) {
+      this._label.text = text;
     }
   }
 );
 
 const PopupScrollableSubMenuMenuItem = GObject.registerClass(
   class PopupScrollableSubMenuMenuItem extends PopupMenu.PopupSubMenuMenuItem {
-    _init(props) {
-      super._init(props);
+    _init(...args) {
+      super._init(...args);
 
       this.menu._needsScrollbar = () => true;
       this.menu.box.height = 200;
@@ -217,13 +222,13 @@ const TailscaleMenuToggle = GObject.registerClass(
   class TailscaleMenuToggle extends QuickSettings.QuickMenuToggle {
     _init(icon, tailscale) {
       super._init({
-        label: "Tailscale",
+        label: _("Tailscale"),
         gicon: icon,
         toggleMode: true,
         menuEnabled: true,
       });
 
-      this.title = "Tailscale";
+      this.title = _("Tailscale");
       this.subtitle = _("Disconnected");
       tailscale.bind_property("running", this, "checked", GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL);
 
@@ -239,6 +244,17 @@ const TailscaleMenuToggle = GObject.registerClass(
       tailscale.connect("notify::exit-node-name", updateHeader);
       tailscale.connect("notify::running", updateHeader);
       updateHeader();
+
+      const errorItem = new TailscaleInfoItem("");
+      const updateError = obj => {
+        const hasError = Boolean(obj.last_error);
+        errorItem.visible = hasError;
+        errorItem.setText(hasError ? obj.last_error : "");
+      };
+      tailscale.connect("notify::last-error", updateError);
+      updateError(tailscale);
+      this.menu.addMenuItem(errorItem);
+      this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
       // NODES
       const mnodes = new PopupScrollableSubMenuMenuItem(_("Nodes"), false, {});
@@ -293,9 +309,6 @@ const TailscaleMenuToggle = GObject.registerClass(
       this.menu.addMenuItem(mmullvad);
       bindVisibility(mnodes, tailscale);
       bindVisibility(mmullvad, tailscale);
-
-      // SEPARATOR
-      this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
       // PREFS
       const prefs = new PopupMenu.PopupSubMenuMenuItem(_("Settings"), false, {});

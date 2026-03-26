@@ -19,6 +19,26 @@ class TailscaleApiClient {
     this.decoder = new TextDecoder();
   }
 
+  _getMessageStatus(message) {
+    return typeof message.get_status === "function"
+      ? message.get_status()
+      : message.status_code;
+  }
+
+  _getContentType(message) {
+    const contentType = message.response_headers.get_one("Content-Type") ?? "";
+    return contentType.split(";")[0].trim();
+  }
+
+  _ensureSuccessfulResponse(message, path) {
+    const status = this._getMessageStatus(message);
+    if (status >= 200 && status < 300)
+      return;
+
+    const reasonPhrase = message.reason_phrase ?? "Unknown error";
+    throw new Error(`Tailscale API request failed for ${path}: ${status} ${reasonPhrase}`);
+  }
+
   async* stream(method, path, cancellable) {
     const message = Soup.Message.new(method, `http://local-tailscaled.sock${path}`);
 
@@ -28,16 +48,17 @@ class TailscaleApiClient {
       GLib.PRIORITY_DEFAULT,
       cancellable,
     );
+    this._ensureSuccessfulResponse(message, path);
     const stream = new Gio.DataInputStream({ base_stream });
     try {
-      const content_type = message.response_headers.get_one("Content-Type");
+      const content_type = this._getContentType(message);
       while (true) {
         const [_response, length] = await stream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable);
         if (length == 0) {
           break;
         }
         const response = this.decoder.decode(_response);
-        yield content_type == "application/json" ? JSON.parse(response) : response;
+        yield content_type === "application/json" ? JSON.parse(response) : response;
       }
     } finally {
       stream.close(null);
@@ -53,9 +74,10 @@ class TailscaleApiClient {
 
     Gio._promisify(Soup.Session.prototype, "send_and_read_async");
     const response_bytes = await this.session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null);
+    this._ensureSuccessfulResponse(message, path);
     const response = this.decoder.decode(response_bytes.get_data());
-    const content_type = message.response_headers.get_one("Content-Type");
-    return content_type == "application/json" ? JSON.parse(response) : response
+    const content_type = this._getContentType(message);
+    return content_type === "application/json" ? JSON.parse(response) : response;
   }
 }
 
@@ -179,6 +201,18 @@ export const Tailscale = GObject.registerClass(
         this._nodes = nodes;
         this.notify("nodes");
       }
+
+      this._update_exit_node_name(prefs);
+    }
+
+    _update_exit_node_name(prefs) {
+      const exitNodePeer = this._peers?.find(peer => peer.ID === prefs.ExitNodeID);
+      const exitNodeDnsName = exitNodePeer?.DNSName ?? exitNodePeer?.Name ?? "";
+      const exitNodeName = exitNodeDnsName ? exitNodeDnsName.split(".")[0] : "";
+      if (exitNodeName !== this._exit_node_name) {
+        this._exit_node_name = exitNodeName;
+        this.notify("exit-node-name");
+      }
     }
 
     _process_exit_node(prefs) {
@@ -186,11 +220,9 @@ export const Tailscale = GObject.registerClass(
       if (exit_node_id != this._exit_node) {
         this._exit_node = exit_node_id;
         this.notify("exit-node");
-        const exitNodePeer = this._peers?.find(peer => peer.ID === exit_node_id);
-        const exitNodeDnsName = exitNodePeer?.DNSName ?? exitNodePeer?.Name ?? "";
-        this._exit_node_name = exitNodeDnsName ? exitNodeDnsName.split(".")[0] : null;
-        this.notify("exit-node-name");
       }
+
+      this._update_exit_node_name(prefs);
     }
 
     _process_dns(prefs) {
@@ -350,13 +382,7 @@ export const Tailscale = GObject.registerClass(
 
       while (true) {
         try {
-          const status = await this._client.request("GET", "/localapi/v0/status")
-          this._peers = Object.values(status.Peer || {});
-          this._prefs = await this._client.request("GET", "/localapi/v0/prefs")
-          this._profiles = await this._client.request("GET", "/localapi/v0/profiles/") || []
-          this._clear_error();
-          this.notify("profiles");
-          this._parse_response();
+          await this._refresh();
 
           for await (const update of this._client.stream("GET", "/localapi/v0/watch-ipn-bus", this._cancelable)) {
             let should_update = false;
@@ -409,6 +435,16 @@ export const Tailscale = GObject.registerClass(
       }
     }
 
+    async _refresh() {
+      const status = await this._client.request("GET", "/localapi/v0/status");
+      this._peers = Object.values(status.Peer || {});
+      this._prefs = await this._client.request("GET", "/localapi/v0/prefs");
+      this._profiles = await this._client.request("GET", "/localapi/v0/profiles/") || [];
+      this._clear_error();
+      this.notify("profiles");
+      this._parse_response();
+    }
+
     _update_prefs(prefs) {
       const body = {
         ...prefs,
@@ -416,7 +452,7 @@ export const Tailscale = GObject.registerClass(
           Object.entries(prefs)
             .map(([key, _]) => [`${key}Set`, true]),
         ),
-      }
+      };
       this._client.request("PATCH", "/localapi/v0/prefs", body)
         .then(
           (prefs) => {
@@ -433,12 +469,10 @@ export const Tailscale = GObject.registerClass(
 
     _update_profile(value) {
       this._client.request("POST", `/localapi/v0/profiles/${value}`, {})
-        .then(() => this._client.request("GET", "/localapi/v0/profiles/"))
+        .then(() => this._refresh())
         .then(
-          profiles => {
+          () => {
             this._clear_error();
-            this._profiles = profiles || [];
-            this.notify('profiles');
           },
           (error) => {
             this._set_error(error);
