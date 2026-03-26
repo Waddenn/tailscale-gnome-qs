@@ -336,7 +336,7 @@ export const Tailscale = GObject.registerClass(
                 ID: peer.StableID,
                 DNSName: peer.Name,
                 OS: peer.Hostinfo.OS,
-                ExitNodeOption: peer.AllowedIPs?.includes("0.0.0.0/0"),
+                ExitNodeOption: peer.AllowedIPs?.some(ip => ip === "0.0.0.0/0" || ip === "::/0"),
                 Online: peer.Online,
                 TailscaleIPs: peer.Addresses.map(address => address.split("/")[0]),
                 Tags: peer.Tags,
@@ -379,7 +379,7 @@ export const Tailscale = GObject.registerClass(
         ...prefs,
         ...Object.fromEntries(
           Object.entries(prefs)
-            .map(([key, _]) => [`${key}set`, true]),
+            .map(([key, _]) => [`${key}Set`, true]),
         ),
       }
       this._client.request("PATCH", "/localapi/v0/prefs", body)

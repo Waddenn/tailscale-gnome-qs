@@ -2,6 +2,8 @@
 
 [<img alt="" height="100" src="https://raw.githubusercontent.com/andyholmes/gnome-shell-extensions-badge/master/get-it-on-ego.svg?sanitize=true">](https://extensions.gnome.org/extension/6139/tailscale-qs/)
 
+Supported GNOME Shell versions: 45, 46, 47, 48, 49.
+
 ##### BUILD (UBUNTU)
 
 ```bash
@@ -9,6 +11,14 @@ sudo apt update && sudo apt install make gettext gnome-shell
 make build
 make install
 ```
+
+##### DEVELOPMENT
+
+```bash
+make run
+```
+
+`make run` uses `gnome-shell --devkit --wayland` when available, and falls back to `--nested --wayland` on older GNOME Shell releases.
 
 ##### CONFIG
 Make sure you set yourself tailscale operator

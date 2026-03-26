@@ -22,7 +22,11 @@ enable:
 	dbus-run-session -- gnome-extensions enable tailscale@joaophi.github.com
 
 run:
-	dbus-run-session -- gnome-shell --nested --wayland
+	@if gnome-shell --help | grep -q -- '--devkit'; then \
+		dbus-run-session -- gnome-shell --devkit --wayland; \
+	else \
+		dbus-run-session -- gnome-shell --nested --wayland; \
+	fi
 
 clean:
 	@rm -fv $(BUNDLE_PATH)

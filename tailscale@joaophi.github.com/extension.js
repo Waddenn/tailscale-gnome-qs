@@ -34,6 +34,17 @@ const QuickSettingsMenu = Main.panel.statusArea.quickSettings;
 import { Tailscale } from "./tailscale.js";
 import { clearInterval, clearSources, setInterval } from "./timeout.js";
 
+function showOsd(icon, label) {
+  const osd = Main.osdWindowManager;
+
+  if (osd.showOne) {
+    osd.showOne(-1, icon, label);
+    return;
+  }
+
+  osd.show(-1, icon, label);
+}
+
 const TailscaleIndicator = GObject.registerClass(
   class TailscaleIndicator extends QuickSettings.SystemIndicator {
     _init(icon, tailscale) {
@@ -82,25 +93,39 @@ const TailscaleDeviceItem = GObject.registerClass(
 
       this.connect('activate', () => onClick());
 
-      const clickAction = this._clickAction ?? (() => {
-        const action = new Clutter.ClickAction();
-        this.add_action(action);
-        action.connect('notify::pressed', () => {
-          if (action.pressed)
-            this.add_style_pseudo_class('active');
-          else
-            this.remove_style_pseudo_class('active');
+      if (Clutter.LongPressGesture) {
+        const longPressGesture = new Clutter.LongPressGesture();
+        longPressGesture.connect('recognize', () => onLongClick());
+        this.add_action(longPressGesture);
+
+        const clickGesture = new Clutter.ClickGesture({
+          recognize_on_press: false,
         });
-        action.connect('clicked', () => this.activate(Clutter.get_current_event()));
-        return action
-      })();
-      clickAction.connect('long-press', (_action, _actor, state) => {
-        if (state === Clutter.LongPressState.ACTIVATE) {
-          return onLongClick();
-        }
-        return true;
-      });
-      clickAction.enabled = true;
+        clickGesture.connect('recognize', () => {
+          this.activate(Clutter.get_current_event());
+        });
+        this.add_action(clickGesture);
+      } else {
+        const clickAction = this._clickAction ?? (() => {
+          const action = new Clutter.ClickAction();
+          this.add_action(action);
+          action.connect('notify::pressed', () => {
+            if (action.pressed)
+              this.add_style_pseudo_class('active');
+            else
+              this.remove_style_pseudo_class('active');
+          });
+          action.connect('clicked', () => this.activate(Clutter.get_current_event()));
+          return action;
+        })();
+        clickAction.connect('long-press', (_action, _actor, state) => {
+          if (state === Clutter.LongPressState.ACTIVATE)
+            return onLongClick();
+
+          return true;
+        });
+        clickAction.enabled = true;
+      }
     }
 
     activate(event) {
@@ -189,9 +214,10 @@ const TailscaleMenuToggle = GObject.registerClass(
       const nodes = new PopupMenu.PopupMenuSection();
       const update_nodes = (obj) => {
         nodes.removeAll();
-        const mullvad = new PopupMenu.PopupSubMenuMenuItem("Mullvad", false, {});
+        const regularNodes = [];
+        const mullvadNodes = [];
+
         for (const node of obj.nodes) {
-          const menu = (node.mullvad && !node.exit_node) ? mullvad.menu : nodes;
           const device_icon = !node.online
             ? "network-offline-symbolic"
             : ((node.os == "android" || node.os == "iOS")
@@ -207,16 +233,24 @@ const TailscaleMenuToggle = GObject.registerClass(
 
             St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, node.ips[0]);
             St.Clipboard.get_default().set_text(St.ClipboardType.PRIMARY, node.ips[0]);
-            Main.osdWindowManager.show(-1, icon, _("IP address has been copied to the clipboard"));
+            showOsd(icon, _("IP address has been copied to the clipboard"));
             return true;
           };
 
-          menu.addMenuItem(new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick));
+          const item = new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick);
+          if (node.mullvad && !node.exit_node)
+            mullvadNodes.push(item);
+          else
+            regularNodes.push(item);
         }
-        if (mullvad.menu.isEmpty()) {
-          mullvad.destroy();
-        } else {
-          nodes.addMenuItem(mullvad);
+
+        for (const item of regularNodes)
+          nodes.addMenuItem(item);
+
+        if (mullvadNodes.length > 0) {
+          nodes.addMenuItem(new PopupMenu.PopupSeparatorMenuItem("Mullvad"));
+          for (const item of mullvadNodes)
+            nodes.addMenuItem(item);
         }
       }
       tailscale.connect("notify::nodes", (obj) => update_nodes(obj));
