@@ -212,10 +212,12 @@ const TailscaleMenuToggle = GObject.registerClass(
       // NODES
       const mnodes = new PopupScrollableSubMenuMenuItem(_("Nodes"), false, {});
       const nodes = new PopupMenu.PopupMenuSection();
+      const mmullvad = new PopupScrollableSubMenuMenuItem(_("Mullvad"), false, {});
+      const mullvadNodes = new PopupMenu.PopupMenuSection();
       const update_nodes = (obj) => {
         nodes.removeAll();
-        const regularNodes = [];
-        const mullvadNodes = [];
+        mullvadNodes.removeAll();
+        let hasMullvadNodes = false;
 
         for (const node of obj.nodes) {
           const device_icon = !node.online
@@ -238,25 +240,22 @@ const TailscaleMenuToggle = GObject.registerClass(
           };
 
           const item = new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick);
-          if (node.mullvad && !node.exit_node)
-            mullvadNodes.push(item);
-          else
-            regularNodes.push(item);
-        }
-
-        for (const item of regularNodes)
-          nodes.addMenuItem(item);
-
-        if (mullvadNodes.length > 0) {
-          nodes.addMenuItem(new PopupMenu.PopupSeparatorMenuItem("Mullvad"));
-          for (const item of mullvadNodes)
+          if (node.mullvad && !node.exit_node) {
+            hasMullvadNodes = true;
+            mullvadNodes.addMenuItem(item);
+          } else {
             nodes.addMenuItem(item);
+          }
         }
+
+        mmullvad.visible = hasMullvadNodes;
       }
       tailscale.connect("notify::nodes", (obj) => update_nodes(obj));
       update_nodes(tailscale);
       mnodes.menu.addMenuItem(nodes);
       this.menu.addMenuItem(mnodes);
+      mmullvad.menu.addMenuItem(mullvadNodes);
+      this.menu.addMenuItem(mmullvad);
 
       // SEPARATOR
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
