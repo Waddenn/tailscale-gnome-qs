@@ -53,6 +53,20 @@ function showOsd(icon, label) {
   osd.show(-1, icon, label);
 }
 
+function getNodeCountryLabel(node) {
+  return node.location?.Country || node.location?.CountryCode || _("Other");
+}
+
+function getNodeIconName(node) {
+  return !node.online
+    ? "network-offline-symbolic"
+    : ((node.os == "android" || node.os == "iOS")
+      ? "phone-symbolic"
+      : (node.mullvad
+        ? "network-vpn-symbolic"
+        : "computer-symbolic"));
+}
+
 const TailscaleIndicator = GObject.registerClass(
   class TailscaleIndicator extends QuickSettings.SystemIndicator {
     _init(icon, tailscale) {
@@ -261,43 +275,61 @@ const TailscaleMenuToggle = GObject.registerClass(
       const nodes = new PopupMenu.PopupMenuSection();
       const mmullvad = new PopupScrollableSubMenuMenuItem(_("Mullvad"), false, {});
       const mullvadNodes = new PopupMenu.PopupMenuSection();
+      const createNodeItem = node => {
+        const subtitle = node.exit_node ? _("disable exit node") : (node.exit_node_option ? _("use as exit node") : "");
+        const onClick = node.exit_node_option ? () => { tailscale.exit_node = node.exit_node ? "" : node.id; } : null;
+        const onLongClick = () => {
+          if (!node.ips)
+            return false;
+
+          St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, node.ips[0]);
+          St.Clipboard.get_default().set_text(St.ClipboardType.PRIMARY, node.ips[0]);
+          showOsd(icon, _("IP address has been copied to the clipboard"));
+          return true;
+        };
+
+        return new TailscaleDeviceItem(getNodeIconName(node), node.name, subtitle, onClick, onLongClick);
+      };
+      const addGroupedNodes = (section, sectionNodes) => {
+        const countryGroups = new Map();
+
+        for (const node of sectionNodes) {
+          const country = getNodeCountryLabel(node);
+          if (!countryGroups.has(country))
+            countryGroups.set(country, []);
+          countryGroups.get(country).push(node);
+        }
+
+        const countries = [...countryGroups.keys()].sort((a, b) => {
+          const aActive = countryGroups.get(a).some(node => node.exit_node);
+          const bActive = countryGroups.get(b).some(node => node.exit_node);
+          return (bActive - aActive) || a.localeCompare(b);
+        });
+
+        countries.forEach((country, index) => {
+          if (index > 0)
+            section.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+          section.addMenuItem(new TailscaleInfoItem(country));
+          for (const node of countryGroups.get(country))
+            section.addMenuItem(createNodeItem(node));
+        });
+      };
       const updateNodes = obj => {
         nodes.removeAll();
         mullvadNodes.removeAll();
-        let hasMullvadNodes = false;
+        const standardNodes = obj.nodes.filter(node => !node.mullvad);
+        const mullvadNodeList = obj.nodes.filter(node => node.mullvad);
+        const hasMullvadNodes = mullvadNodeList.length > 0;
 
-        if (!obj.nodes.length) {
+        if (!standardNodes.length) {
           nodes.addMenuItem(new TailscaleInfoItem(_("No devices available")));
+        } else {
+          addGroupedNodes(nodes, standardNodes);
         }
 
-        for (const node of obj.nodes) {
-          const device_icon = !node.online
-            ? "network-offline-symbolic"
-            : ((node.os == "android" || node.os == "iOS")
-              ? "phone-symbolic"
-              : (node.mullvad
-                ? "network-vpn-symbolic"
-                : "computer-symbolic"));
-          const subtitle = node.exit_node ? _("disable exit node") : (node.exit_node_option ? _("use as exit node") : "");
-          const onClick = node.exit_node_option ? () => { tailscale.exit_node = node.exit_node ? "" : node.id; } : null;
-          const onLongClick = () => {
-            if (!node.ips)
-              return false;
-
-            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, node.ips[0]);
-            St.Clipboard.get_default().set_text(St.ClipboardType.PRIMARY, node.ips[0]);
-            showOsd(icon, _("IP address has been copied to the clipboard"));
-            return true;
-          };
-
-          const item = new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick);
-          if (node.mullvad) {
-            hasMullvadNodes = true;
-            mullvadNodes.addMenuItem(item);
-          } else {
-            nodes.addMenuItem(item);
-          }
-        }
+        if (hasMullvadNodes)
+          addGroupedNodes(mullvadNodes, mullvadNodeList);
 
         mmullvad.visible = hasMullvadNodes;
       }
