@@ -225,7 +225,7 @@ const TailscaleExpanderItem = GObject.registerClass(
   class TailscaleExpanderItem extends PopupMenu.PopupBaseMenuItem {
     _init(text, expanded, onToggle) {
       super._init({
-        activate: true,
+        activate: false,
       });
 
       const label = new St.Label({
@@ -240,14 +240,27 @@ const TailscaleExpanderItem = GObject.registerClass(
       });
       this.add_child(this._icon);
 
-      this.connect('activate', () => onToggle());
+      if (Clutter.ClickGesture) {
+        const clickGesture = new Clutter.ClickGesture({
+          recognize_on_press: false,
+        });
+        clickGesture.connect('recognize', () => onToggle());
+        this.add_action(clickGesture);
+      } else {
+        const clickAction = new Clutter.ClickAction();
+        this.add_action(clickAction);
+        clickAction.connect('notify::pressed', () => {
+          if (clickAction.pressed)
+            this.add_style_pseudo_class('active');
+          else
+            this.remove_style_pseudo_class('active');
+        });
+        clickAction.connect('clicked', () => onToggle());
+      }
     }
 
     setExpanded(expanded) {
       this._icon.icon_name = expanded ? 'pan-down-symbolic' : 'pan-end-symbolic';
-    }
-
-    itemActivated() {
     }
   }
 );
