@@ -69,7 +69,10 @@ function getNodeIconName(node) {
 
 function getNodeDisplayName(node) {
   const city = node.location?.City;
-  return city ? `${node.name} (${city})` : node.name;
+  if (!city)
+    return node.name;
+
+  return city;
 }
 
 const TailscaleIndicator = GObject.registerClass(
@@ -378,8 +381,27 @@ const TailscaleMenuToggle = GObject.registerClass(
             countrySection.actor.visible = expanded;
           });
 
-          for (const node of countryNodes)
-            countrySection.addMenuItem(createNodeItem(node));
+          for (const node of countryNodes) {
+            const subtitle = node.exit_node ? _("disable exit node") : (node.exit_node_option ? _("use as exit node") : "");
+            const onClick = node.exit_node_option ? () => { tailscale.exit_node = node.exit_node ? "" : node.id; } : null;
+            const onLongClick = () => {
+              if (!node.ips)
+                return false;
+
+              St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, node.ips[0]);
+              St.Clipboard.get_default().set_text(St.ClipboardType.PRIMARY, node.ips[0]);
+              showOsd(icon, _("IP address has been copied to the clipboard"));
+              return true;
+            };
+
+            countrySection.addMenuItem(new TailscaleDeviceItem(
+              getNodeIconName(node),
+              getNodeDisplayName(node),
+              subtitle,
+              onClick,
+              onLongClick,
+            ));
+          }
 
           countryExpansionState.set(stateKey, expanded);
           countrySection.actor.visible = expanded;
