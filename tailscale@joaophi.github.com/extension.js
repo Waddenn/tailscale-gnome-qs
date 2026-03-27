@@ -337,8 +337,14 @@ const TailscaleMenuToggle = GObject.registerClass(
       };
       const addGroupedNodes = (section, sectionNodes) => {
         const countryGroups = new Map();
+        const ungroupedNodes = [];
 
         for (const node of sectionNodes) {
+          if (section === nodes && !node.location?.Country && !node.location?.CountryCode) {
+            ungroupedNodes.push(node);
+            continue;
+          }
+
           const country = getNodeCountryLabel(node);
           if (!countryGroups.has(country))
             countryGroups.set(country, []);
@@ -375,6 +381,9 @@ const TailscaleMenuToggle = GObject.registerClass(
           section.addMenuItem(countryItem);
           section.addMenuItem(countrySection);
         }
+
+        for (const node of ungroupedNodes)
+          section.addMenuItem(createNodeItem(node));
       };
       const updateNodes = obj => {
         nodes.removeAll();
