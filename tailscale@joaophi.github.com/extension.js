@@ -221,6 +221,37 @@ const TailscaleInfoItem = GObject.registerClass(
   }
 );
 
+const TailscaleExpanderItem = GObject.registerClass(
+  class TailscaleExpanderItem extends PopupMenu.PopupBaseMenuItem {
+    _init(text, expanded, onToggle) {
+      super._init({
+        activate: true,
+      });
+
+      const label = new St.Label({
+        text,
+        x_expand: true,
+      });
+      this.add_child(label);
+
+      this._icon = new St.Icon({
+        style_class: 'popup-menu-icon',
+        icon_name: expanded ? 'pan-down-symbolic' : 'pan-end-symbolic',
+      });
+      this.add_child(this._icon);
+
+      this.connect('activate', () => onToggle());
+    }
+
+    setExpanded(expanded) {
+      this._icon.icon_name = expanded ? 'pan-down-symbolic' : 'pan-end-symbolic';
+    }
+
+    itemActivated() {
+    }
+  }
+);
+
 const PopupScrollableSubMenuMenuItem = GObject.registerClass(
   class PopupScrollableSubMenuMenuItem extends PopupMenu.PopupSubMenuMenuItem {
     _init(...args) {
@@ -275,6 +306,7 @@ const TailscaleMenuToggle = GObject.registerClass(
       const nodes = new PopupMenu.PopupMenuSection();
       const mmullvad = new PopupScrollableSubMenuMenuItem(_("Mullvad"), false, {});
       const mullvadNodes = new PopupMenu.PopupMenuSection();
+      const countryExpansionState = new Map();
       const createNodeItem = node => {
         const subtitle = node.exit_node ? _("disable exit node") : (node.exit_node_option ? _("use as exit node") : "");
         const onClick = node.exit_node_option ? () => { tailscale.exit_node = node.exit_node ? "" : node.id; } : null;
@@ -308,15 +340,27 @@ const TailscaleMenuToggle = GObject.registerClass(
 
         for (const country of countries) {
           const countryNodes = countryGroups.get(country);
-          const countryMenu = new PopupScrollableSubMenuMenuItem(country, false, {});
+          const stateKey = `${section === mullvadNodes ? "mullvad" : "nodes"}:${country}`;
+          const defaultExpanded = countryNodes.some(node => node.exit_node);
+          let expanded = countryExpansionState.get(stateKey);
+          if (expanded === undefined)
+            expanded = defaultExpanded;
+
+          const countrySection = new PopupMenu.PopupMenuSection();
+          const countryItem = new TailscaleExpanderItem(country, expanded, () => {
+            expanded = !expanded;
+            countryExpansionState.set(stateKey, expanded);
+            countryItem.setExpanded(expanded);
+            countrySection.actor.visible = expanded;
+          });
 
           for (const node of countryNodes)
-            countryMenu.menu.addMenuItem(createNodeItem(node));
+            countrySection.addMenuItem(createNodeItem(node));
 
-          if (countryNodes.some(node => node.exit_node))
-            countryMenu.setSubmenuShown(true);
-
-          section.addMenuItem(countryMenu);
+          countryExpansionState.set(stateKey, expanded);
+          countrySection.actor.visible = expanded;
+          section.addMenuItem(countryItem);
+          section.addMenuItem(countrySection);
         }
       };
       const updateNodes = obj => {
