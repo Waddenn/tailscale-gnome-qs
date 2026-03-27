@@ -306,14 +306,20 @@ const TailscaleMenuToggle = GObject.registerClass(
           return (bActive - aActive) || a.localeCompare(b);
         });
 
-        countries.forEach((country, index) => {
-          if (index > 0)
-            section.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        for (const country of countries) {
+          const countryNodes = countryGroups.get(country);
+          const countryMenu = new PopupMenu.PopupSubMenuMenuItem(country, false, {});
+          countryMenu.menu.box.height = 200;
+          countryMenu.menu._needsScrollbar = () => true;
 
-          section.addMenuItem(new TailscaleInfoItem(country));
-          for (const node of countryGroups.get(country))
-            section.addMenuItem(createNodeItem(node));
-        });
+          for (const node of countryNodes)
+            countryMenu.menu.addMenuItem(createNodeItem(node));
+
+          if (countryNodes.some(node => node.exit_node))
+            countryMenu.setSubmenuShown(true);
+
+          section.addMenuItem(countryMenu);
+        }
       };
       const updateNodes = obj => {
         nodes.removeAll();
