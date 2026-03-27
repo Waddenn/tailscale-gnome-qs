@@ -60,8 +60,8 @@ msgstr "Profili"
 msgid "Nodes"
 msgstr "Nodi"
 
-msgid "Mullvad"
-msgstr "Mullvad"
+msgid "Mullvad exit nodes"
+msgstr "Nodi di uscita Mullvad"
 
 msgid "Unknown profile"
 msgstr "Profilo sconosciuto"

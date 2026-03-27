@@ -67,6 +67,11 @@ function getNodeIconName(node) {
         : "computer-symbolic"));
 }
 
+function getNodeDisplayName(node) {
+  const city = node.location?.City;
+  return city ? `${node.name} (${city})` : node.name;
+}
+
 const TailscaleIndicator = GObject.registerClass(
   class TailscaleIndicator extends QuickSettings.SystemIndicator {
     _init(icon, tailscale) {
@@ -317,7 +322,7 @@ const TailscaleMenuToggle = GObject.registerClass(
       // NODES
       const mnodes = new PopupScrollableSubMenuMenuItem(_("Nodes"), false, {});
       const nodes = new PopupMenu.PopupMenuSection();
-      const mmullvad = new PopupScrollableSubMenuMenuItem(_("Mullvad"), false, {});
+      const mmullvad = new PopupScrollableSubMenuMenuItem(_("Mullvad exit nodes"), false, {});
       const mullvadNodes = new PopupMenu.PopupMenuSection();
       const countryExpansionState = new Map();
       const createNodeItem = node => {
@@ -333,7 +338,7 @@ const TailscaleMenuToggle = GObject.registerClass(
           return true;
         };
 
-        return new TailscaleDeviceItem(getNodeIconName(node), node.name, subtitle, onClick, onLongClick);
+        return new TailscaleDeviceItem(getNodeIconName(node), getNodeDisplayName(node), subtitle, onClick, onLongClick);
       };
       const addGroupedNodes = (section, sectionNodes) => {
         const countryGroups = new Map();

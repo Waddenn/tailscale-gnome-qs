@@ -57,8 +57,8 @@ msgstr "SSH"
 msgid "Nodes"
 msgstr "Nodos"
 
-msgid "Mullvad"
-msgstr "Mullvad"
+msgid "Mullvad exit nodes"
+msgstr "Nodos de salida de Mullvad"
 
 msgid "Profiles"
 msgstr "Perfiles"
