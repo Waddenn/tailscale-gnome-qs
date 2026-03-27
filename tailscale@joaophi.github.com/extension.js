@@ -308,9 +308,7 @@ const TailscaleMenuToggle = GObject.registerClass(
 
         for (const country of countries) {
           const countryNodes = countryGroups.get(country);
-          const countryMenu = new PopupMenu.PopupSubMenuMenuItem(country, false, {});
-          countryMenu.menu.box.height = 200;
-          countryMenu.menu._needsScrollbar = () => true;
+          const countryMenu = new PopupScrollableSubMenuMenuItem(country, false, {});
 
           for (const node of countryNodes)
             countryMenu.menu.addMenuItem(createNodeItem(node));
